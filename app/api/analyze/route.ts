@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 export async function POST(request: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -21,9 +21,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Gemini AI を初期化
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        // Gemini AI を初期化（新しいSDK）
+        const ai = new GoogleGenAI({ apiKey });
 
         // プロンプトを作成
         const prompt = `
@@ -59,10 +58,20 @@ export async function POST(request: NextRequest) {
 - 物件の詳細がわからない場合は properties を空配列にしてください
 `;
 
-        // Gemini API を呼び出し
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        // Gemini API を呼び出し（新しいSDK）
+        const response = await ai.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: prompt,
+        });
+
+        const text = response.text;
+
+        if (!text) {
+            return NextResponse.json(
+                { error: "AIからの応答がありませんでした" },
+                { status: 500 }
+            );
+        }
 
         // JSONを抽出
         const jsonMatch = text.match(/\{[\s\S]*\}/);
