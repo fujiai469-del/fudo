@@ -60,8 +60,32 @@ export async function POST(request: NextRequest) {
 - もし正確な物件個別の金額がわからない場合は、locationは推測せず、propertiesは空配列にしてください
 `;
 
-        // Gemini API を呼び出し
-        const result = await model.generateContent(prompt);
+        // Gemini API を呼び出し（リトライ付き）
+        let result;
+        let lastError;
+        const maxRetries = 3;
+
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                result = await model.generateContent(prompt);
+                break;
+            } catch (error: any) {
+                console.error(`Attempt ${i + 1} failed:`, error);
+                lastError = error;
+                // 503エラー（Overloaded）の場合は少し待ってリトライ
+                if (error.status === 503 || error.message?.includes("503") || error.message?.includes("overloaded")) {
+                    await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1))); // 1s, 2s...
+                    continue;
+                }
+                // その他のエラーは即時スロー
+                throw error;
+            }
+        }
+
+        if (!result) {
+            throw lastError || new Error("Failed to generate content after retries");
+        }
+
         const response = await result.response;
         const text = response.text();
 
