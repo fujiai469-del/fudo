@@ -58,7 +58,7 @@ export default function LoadingOverlay() {
                         分析中...
                     </div>
                     <div className="text-sm text-gray-500">
-                        EDINET から決算データを取得しています
+                        Gemini AI が企業データを分析しています
                     </div>
                 </motion.div>
 

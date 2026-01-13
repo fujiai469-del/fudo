@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Book, TrendingUp, BarChart3, Building2, Info } from "lucide-react";
+import { Book, TrendingUp, BarChart3, Building2, Info, Sparkles } from "lucide-react";
 
 import Header from "./components/Header";
 import SearchBar from "./components/SearchBar";
@@ -22,61 +22,38 @@ interface Property {
 
 interface CompanyData {
   companyName: string;
-  bookValue: number; // 帳簿価額（百万円）
-  marketValue: number; // 時価（百万円）
-  unrealizedGain: number; // 含み損益（百万円）
+  bookValue: number;
+  marketValue: number;
+  unrealizedGain: number;
   properties: Property[];
-  source: "edinet" | "mock"; // データソース
-  docId?: string; // EDINET書類ID
+  source: "gemini" | "mock";
+  fiscalYear?: string;
+  note?: string;
 }
 
-interface SearchResult {
-  data: CompanyData | null;
-  error: string | null;
-  edinetAvailable: boolean;
+// 物件の緯度経度データ（日本の主要都市）
+const cityCoordinates: { [key: string]: { lat: number; lng: number } } = {
+  "東京": { lat: 35.6762, lng: 139.6503 },
+  "大阪": { lat: 34.6937, lng: 135.5023 },
+  "名古屋": { lat: 35.1815, lng: 136.9066 },
+  "福岡": { lat: 33.5902, lng: 130.4017 },
+  "札幌": { lat: 43.0618, lng: 141.3545 },
+  "横浜": { lat: 35.4437, lng: 139.6380 },
+  "神戸": { lat: 34.6901, lng: 135.1956 },
+  "京都": { lat: 35.0116, lng: 135.7681 },
+  "広島": { lat: 34.3853, lng: 132.4553 },
+  "仙台": { lat: 38.2682, lng: 140.8694 },
+};
+
+function getCoordinatesFromLocation(location: string): { lat: number; lng: number } {
+  for (const [city, coords] of Object.entries(cityCoordinates)) {
+    if (location.includes(city)) {
+      return { lat: coords.lat + (Math.random() - 0.5) * 0.1, lng: coords.lng + (Math.random() - 0.5) * 0.1 };
+    }
+  }
+  // デフォルトは東京周辺
+  return { lat: 35.6762 + (Math.random() - 0.5) * 0.5, lng: 139.6503 + (Math.random() - 0.5) * 0.5 };
 }
-
-// モックデータ（デモ用）
-const mockCompanyData: { [key: string]: CompanyData } = {
-  "株式会社ナガオカ": {
-    companyName: "株式会社ナガオカ",
-    bookValue: 2845,
-    marketValue: 4210,
-    unrealizedGain: 1365,
-    source: "mock",
-    properties: [
-      { id: "1", name: "梅田オフィスビル", location: "大阪府大阪市北区", bookValue: 1200, marketValue: 1850 },
-      { id: "2", name: "京都商業施設", location: "京都府京都市", bookValue: 800, marketValue: 1100 },
-      { id: "3", name: "神戸倉庫", location: "兵庫県神戸市", bookValue: 450, marketValue: 580 },
-      { id: "4", name: "大津レジデンス", location: "滋賀県大津市", bookValue: 395, marketValue: 680 },
-    ],
-  },
-  "サンプル不動産": {
-    companyName: "サンプル不動産",
-    bookValue: 5200,
-    marketValue: 4800,
-    unrealizedGain: -400,
-    source: "mock",
-    properties: [
-      { id: "1", name: "新宿オフィスタワー", location: "東京都新宿区", bookValue: 3000, marketValue: 2700 },
-      { id: "2", name: "横浜倉庫", location: "神奈川県横浜市", bookValue: 2200, marketValue: 2100 },
-    ],
-  },
-};
-
-// 物件の緯度経度データ（モック）
-const propertyLocations: { [key: string]: { lat: number; lng: number }[] } = {
-  "株式会社ナガオカ": [
-    { lat: 34.7, lng: 135.5 },
-    { lat: 35.0, lng: 135.75 },
-    { lat: 34.69, lng: 135.2 },
-    { lat: 35.0, lng: 135.85 },
-  ],
-  "サンプル不動産": [
-    { lat: 35.69, lng: 139.7 },
-    { lat: 35.45, lng: 139.64 },
-  ],
-};
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -85,54 +62,48 @@ export default function Home() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [edinetStatus, setEdinetStatus] = useState<"available" | "unavailable" | "unknown">("unknown");
 
-  // EDINET APIで検索
-  const searchWithEdinet = async (companyName: string): Promise<SearchResult> => {
+  // Gemini APIで分析
+  const analyzeWithGemini = async (companyName: string): Promise<{ data: CompanyData | null; error: string | null }> => {
     try {
-      const response = await fetch(`/api/edinet/search?companyName=${encodeURIComponent(companyName)}`);
-      const data = await response.json();
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyName }),
+      });
+
+      const result = await response.json();
 
       if (!response.ok) {
-        return { data: null, error: data.error || "検索に失敗しました", edinetAvailable: true };
+        return { data: null, error: result.error || "分析に失敗しました" };
       }
 
-      // 書類が見つかった場合、詳細データを取得
-      if (data.documents && data.documents.length > 0) {
-        const doc = data.documents[0];
-
-        // 書類の詳細を取得
-        const docResponse = await fetch(`/api/edinet/document?docId=${doc.docID}`);
-        const docData = await docResponse.json();
-
-        // データがある場合
-        if (docData.rawDataAvailable) {
-          return {
-            data: {
-              companyName: doc.filerName,
-              bookValue: docData.bookValue || 0,
-              marketValue: docData.marketValue || 0,
-              unrealizedGain: docData.unrealizedGain || 0,
-              properties: docData.properties || [],
-              source: "edinet",
-              docId: doc.docID,
-            },
-            error: docData.message,
-            edinetAvailable: true,
-          };
-        }
-
-        return {
-          data: null,
-          error: `${doc.filerName}の有価証券報告書を発見しましたが、賃貸等不動産データの解析には追加実装が必要です。`,
-          edinetAvailable: true,
-        };
+      // Geminiからの応答を処理
+      if (!result.found) {
+        return { data: null, error: result.note || "この企業の賃貸等不動産データが見つかりませんでした" };
       }
 
-      return { data: null, error: "該当する有価証券報告書が見つかりませんでした", edinetAvailable: true };
+      // 含み損益を計算（nullの場合）
+      const bookValue = result.bookValue || 0;
+      const marketValue = result.marketValue || 0;
+      const unrealizedGain = result.unrealizedGain ?? (marketValue - bookValue);
+
+      return {
+        data: {
+          companyName: result.companyName,
+          bookValue,
+          marketValue,
+          unrealizedGain,
+          properties: result.properties || [],
+          source: "gemini",
+          fiscalYear: result.fiscalYear,
+          note: result.note,
+        },
+        error: null,
+      };
     } catch (error) {
-      console.error("EDINET search error:", error);
-      return { data: null, error: "EDINET APIへの接続に失敗しました", edinetAvailable: true };
+      console.error("Gemini API error:", error);
+      return { data: null, error: "Gemini AIへの接続に失敗しました" };
     }
   };
 
@@ -143,29 +114,15 @@ export default function Home() {
     setIsLoading(true);
     setHasSearched(true);
     setErrorMessage(null);
+    setCompanyData(null);
 
-    // まずモックデータを確認
-    const mockData = mockCompanyData[searchQuery];
-    if (mockData) {
-      setCompanyData(mockData);
-      setEdinetStatus("unknown");
-      setSelectedPropertyId(null);
-      setIsLoading(false);
-      return;
-    }
-
-    // モックにない場合はEDINET APIを試行
-    const result = await searchWithEdinet(searchQuery);
-
-    setEdinetStatus(result.edinetAvailable ? "available" : "unavailable");
+    // Gemini APIで分析
+    const result = await analyzeWithGemini(searchQuery);
 
     if (result.data) {
       setCompanyData(result.data);
     } else {
-      setCompanyData(null);
-      if (result.error) {
-        setErrorMessage(result.error);
-      }
+      setErrorMessage(result.error);
     }
 
     setSelectedPropertyId(null);
@@ -174,11 +131,8 @@ export default function Home() {
 
   // マップ用のロケーションデータを生成
   const mapLocations = companyData
-    ? companyData.properties.map((prop, index) => {
-      const coords = propertyLocations[companyData.companyName]?.[index] || {
-        lat: 35.0 + Math.random() * 0.5,
-        lng: 135.5 + Math.random() * 0.5,
-      };
+    ? companyData.properties.map((prop) => {
+      const coords = getCoordinatesFromLocation(prop.location);
       return {
         id: prop.id,
         name: prop.name,
@@ -213,13 +167,13 @@ export default function Home() {
           className="text-center mt-4"
         >
           <p className="text-xs text-gray-500 flex items-center justify-center gap-2">
-            <Info className="w-3 h-3" />
+            <Sparkles className="w-3 h-3 text-[var(--neon-purple)]" />
             <span>
-              上場企業名を入力してください（例：トヨタ自動車、ソフトバンク）
+              Gemini AIが企業の賃貸等不動産データを分析します
             </span>
           </p>
           <p className="text-xs text-gray-600 mt-1">
-            デモ：「株式会社ナガオカ」「サンプル不動産」
+            例：トヨタ自動車、三菱地所、住友不動産
           </p>
         </motion.div>
       </section>
@@ -245,17 +199,14 @@ export default function Home() {
                 <span className="text-2xl font-bold text-white">
                   {companyData.companyName}
                 </span>
-                {companyData.source === "edinet" && (
-                  <span className="text-xs px-2 py-1 rounded-full bg-[var(--neon-cyan)] bg-opacity-20 text-[var(--neon-cyan)]">
-                    EDINET
-                  </span>
-                )}
-                {companyData.source === "mock" && (
-                  <span className="text-xs px-2 py-1 rounded-full bg-[var(--neon-purple)] bg-opacity-20 text-[var(--neon-purple)]">
-                    DEMO
-                  </span>
-                )}
+                <span className="text-xs px-2 py-1 rounded-full bg-[var(--neon-purple)] bg-opacity-20 text-[var(--neon-purple)] flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  Gemini AI
+                </span>
               </div>
+              {companyData.fiscalYear && (
+                <p className="text-sm text-gray-500 mt-2">{companyData.fiscalYear}</p>
+              )}
             </motion.div>
 
             {/* Metrics Section */}
@@ -286,6 +237,20 @@ export default function Home() {
                 delay={2}
               />
             </section>
+
+            {/* Note */}
+            {companyData.note && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mb-8 text-center"
+              >
+                <p className="text-sm text-gray-400 glass-card inline-block px-6 py-3">
+                  <Info className="w-4 h-4 inline mr-2" />
+                  {companyData.note}
+                </p>
+              </motion.div>
+            )}
 
             {/* Properties Section */}
             {companyData.properties.length > 0 && (
@@ -322,7 +287,7 @@ export default function Home() {
                 {errorMessage || "入力された企業名に該当するデータがありません。"}
               </p>
               <p className="text-gray-500 text-xs mt-3">
-                正式名称で検索してください（例：トヨタ自動車株式会社）
+                上場企業の正式名称で検索してください
               </p>
             </div>
           </motion.div>
@@ -350,7 +315,7 @@ export default function Home() {
             <p className="text-gray-500 max-w-md mx-auto">
               上の検索バーに企業名を入力して、
               <br />
-              賃貸等不動産の含み損益情報を確認しましょう。
+              Gemini AIで賃貸等不動産の含み損益を分析します。
             </p>
           </motion.div>
         )}
@@ -359,7 +324,10 @@ export default function Home() {
       {/* Footer */}
       <footer className="mt-20 text-center text-xs text-gray-600">
         <div className="flex items-center justify-center gap-4">
-          <span>Powered by EDINET API</span>
+          <span className="flex items-center gap-1">
+            <Sparkles className="w-3 h-3" />
+            Powered by Gemini AI
+          </span>
           <span className="text-[var(--neon-cyan)]">|</span>
           <span>© 2025 Antigravity Dashboard</span>
         </div>
