@@ -23,13 +23,15 @@ export async function POST(request: NextRequest) {
 
         // Gemini AI を初期化
         const genAI = new GoogleGenerativeAI(apiKey);
-        // 安定版のモデルを使用
-        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
-        // プロンプトを作成
+        // プロンプトを作成（IFRS対応を追加）
         const prompt = `
 あなたは有能な証券アナリストです。
-以下の日本の上場企業について、公開されている直近の**有価証券報告書**の【注記事項】（賃貸等不動産関係）を確認し、正確な数値を抽出してください。
+以下の日本の上場企業について、公開されている直近の**有価証券報告書**を確認し、正確な数値を抽出してください。
+
+確認項目:
+1. 日本基準の場合: 【注記事項】の「賃貸等不動産関係」
+2. IFRS（国際会計基準）の場合: 【注記事項】の「投資不動産」
 
 企業名: ${companyName}
 
@@ -38,7 +40,7 @@ export async function POST(request: NextRequest) {
   "companyName": "正式な企業名",
   "found": true または false,
   "bookValue": 帳簿価額（百万円単位の数値、不明なら null）,
-  "marketValue": 時価（百万円単位の数値、不明なら null）,
+  "marketValue": 時価（百万円単位の数値、不明なら null、IFRSで公正価値記載の場合はそれを時価とする）,
   "unrealizedGain": 含み損益（百万円単位の数値、不明なら null）,
   "properties": [],
   "fiscalYear": "データの対象年度（例: 2024年3月期）",
@@ -53,30 +55,50 @@ export async function POST(request: NextRequest) {
 4. 出典（sourceDocument）は必ず具体的に記載してください。
 `;
 
-        // Gemini API を呼び出し（リトライ付き）
+        // モデルリスト（優先度順）
+        // ユーザー要望によりバージョンアップ: 2.0-flash -> flash-latest (1.5系)
+        const modelsToTry = ["gemini-2.0-flash", "gemini-flash-latest"];
+
         let result;
         let lastError;
-        const maxRetries = 3;
 
-        for (let i = 0; i < maxRetries; i++) {
+        // モデルフォールバックループ
+        for (const modelName of modelsToTry) {
             try {
-                result = await model.generateContent(prompt);
-                break;
-            } catch (error: any) {
-                console.error(`Attempt ${i + 1} failed:`, error);
-                lastError = error;
-                // 503エラー（Overloaded）の場合は少し待ってリトライ
-                if (error.status === 503 || error.message?.includes("503") || error.message?.includes("overloaded")) {
-                    await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1))); // 1s, 2s...
-                    continue;
+                console.log(`Trying model: ${modelName}`);
+                const model = genAI.getGenerativeModel({ model: modelName });
+
+                // リトライロジック（各モデル内で最大2回）
+                for (let i = 0; i < 2; i++) {
+                    try {
+                        result = await model.generateContent(prompt);
+                        break; // 成功したらリトライループを抜ける
+                    } catch (error: any) {
+                        console.error(`${modelName} attempt ${i + 1} failed:`, error.message);
+                        // 503 (Overloaded) or 429 (Quota)
+                        if (error.status === 503 || error.status === 429 || error.message?.includes("503") || error.message?.includes("overloaded") || error.message?.includes("quota")) {
+                            // 429/Quotaのエラーなら、このモデルは諦めて次のモデルへ（ただし2.0-flashの場合のみ。latestは粘る価値ありだが今回は即次へ）
+                            if (error.status === 429 || error.message?.includes("quota") || error.message?.includes("limit")) {
+                                throw error; // 次のモデルへ行くためにスロー
+                            }
+                            await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)));
+                            continue;
+                        }
+                        throw error;
+                    }
                 }
-                // その他のエラーは即時スロー
-                throw error;
+
+                if (result) break; // 成功したらモデルループを抜ける
+
+            } catch (error) {
+                lastError = error;
+                console.warn(`Model ${modelName} failed, trying next...`);
+                continue;
             }
         }
 
         if (!result) {
-            throw lastError || new Error("Failed to generate content after retries");
+            throw lastError || new Error("All models failed to generate content");
         }
 
         const response = await result.response;
