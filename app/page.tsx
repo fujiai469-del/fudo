@@ -286,6 +286,11 @@ export default function Home() {
               <p className="text-gray-400 text-sm">
                 {errorMessage || "入力された企業名に該当するデータがありません。"}
               </p>
+              {errorMessage && errorMessage.includes("Gemini") && (
+                <p className="text-xs text-red-400 mt-2 bg-red-900/20 p-2 rounded">
+                  Status: {errorMessage}
+                </p>
+              )}
               <p className="text-gray-500 text-xs mt-3">
                 上場企業の正式名称で検索してください
               </p>

@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error("Gemini API error:", error);
         return NextResponse.json(
-            { error: "Gemini APIでエラーが発生しました", details: String(error) },
+            { error: `Gemini API Error: ${error instanceof Error ? error.message : String(error)}` },
             { status: 500 }
         );
     }
