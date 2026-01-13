@@ -252,8 +252,8 @@ export default function Home() {
               </motion.div>
             )}
 
-            {/* Properties Section */}
-            {companyData.properties.length > 0 && (
+            {/* Properties Section - 物件がある場合のみ表示 */}
+            {companyData.properties.length > 0 ? (
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <PropertyList
                   properties={companyData.properties}
@@ -265,6 +265,13 @@ export default function Home() {
                   onSelectLocation={(loc) => setSelectedPropertyId(loc.id)}
                 />
               </section>
+            ) : (
+              <div className="text-center py-12 glass-card">
+                <p className="text-gray-400">
+                  詳細な物件リストデータはこの企業の公開情報に含まれていません。<br />
+                  （賃貸等不動産の総額のみが開示されています）
+                </p>
+              </div>
             )}
           </motion.div>
         )}
@@ -286,11 +293,6 @@ export default function Home() {
               <p className="text-gray-400 text-sm">
                 {errorMessage || "入力された企業名に該当するデータがありません。"}
               </p>
-              {errorMessage && errorMessage.includes("Gemini") && (
-                <p className="text-xs text-red-400 mt-2 bg-red-900/20 p-2 rounded">
-                  Status: {errorMessage}
-                </p>
-              )}
               <p className="text-gray-500 text-xs mt-3">
                 上場企業の正式名称で検索してください
               </p>
