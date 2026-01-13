@@ -28,6 +28,7 @@ interface CompanyData {
   properties: Property[];
   source: "gemini" | "mock";
   fiscalYear?: string;
+  sourceDocument?: string;
   note?: string;
 }
 
@@ -238,19 +239,24 @@ export default function Home() {
               />
             </section>
 
-            {/* Note */}
-            {companyData.note && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="mb-8 text-center"
-              >
-                <p className="text-sm text-gray-400 glass-card inline-block px-6 py-3">
+            {/* Note & Source */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mb-8 text-center"
+            >
+              {companyData.note && (
+                <p className="text-sm text-gray-400 glass-card inline-block px-6 py-3 mb-2">
                   <Info className="w-4 h-4 inline mr-2" />
                   {companyData.note}
                 </p>
-              </motion.div>
-            )}
+              )}
+              {companyData.sourceDocument && (
+                <p className="text-xs text-gray-500 block">
+                  出典: {companyData.sourceDocument}
+                </p>
+              )}
+            </motion.div>
 
             {/* Properties Section - 物件がある場合のみ表示 */}
             {companyData.properties.length > 0 ? (
@@ -273,6 +279,12 @@ export default function Home() {
                 </p>
               </div>
             )}
+
+            <p className="text-[10px] text-gray-600 text-center mt-8 max-w-2xl mx-auto">
+              ※本データの分析には生成AIを使用しています。
+              有価証券報告書の記載内容と異なる場合や、ハルシネーション（誤った情報の生成）が含まれる可能性があります。
+              正確な情報は各公式サイトのIR資料をご確認ください。
+            </p>
           </motion.div>
         )}
 
