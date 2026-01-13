@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@google/genai": "^1.35.0",
     "@google/generative-ai": "^0.24.1",
     "@vis.gl/react-google-maps": "^1.7.1",
     "framer-motion": "^12.26.1",
