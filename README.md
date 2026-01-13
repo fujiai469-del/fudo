@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Antigravity - 不動産分析ダッシュボード
 
-## Getting Started
+企業の賃貸等不動産データを分析し、未来的なインターフェースで可視化するNext.jsダッシュボード。
 
-First, run the development server:
+![Dashboard Preview](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38B2AC?style=flat-square&logo=tailwind-css)
+
+## ✨ 特徴
+
+- **🌌 Antigravityテーマ**: 深宇宙背景、グラスモーフィズム、ネオングロー効果
+- **🔍 企業検索**: 企業名で賃貸等不動産データを分析
+- **📊 メトリックカード**: 帳簿価額、時価、含み損益を可視化
+- **🗺️ Google Maps連携**: 物件所在地をダークモードマップで表示
+- **🎭 Framer Motion**: フローティングアニメーション
+
+## 🚀 セットアップ
+
+### 1. リポジトリをクローン
+
+```bash
+git clone https://github.com/YOUR_USERNAME/fudo.git
+cd fudo
+```
+
+### 2. 依存関係をインストール
+
+```bash
+npm install
+```
+
+### 3. 環境変数を設定
+
+`.env.local` ファイルをプロジェクトルートに作成：
+
+```env
+# Google Maps API Key
+# https://console.cloud.google.com/apis/credentials から取得
+# "Maps JavaScript API" を有効化してください
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_api_key_here
+```
+
+> **Note**: Google Maps APIキーがなくてもアプリは動作しますが、マップはフォールバック表示になります。
+
+### 4. 開発サーバーを起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ブラウザで [http://localhost:3000](http://localhost:3000) を開いてください。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📸 スクリーンショット
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 検索画面
+深宇宙をイメージしたダークテーマ、ネオングロー効果の検索バー
 
-## Learn More
+### ダッシュボード
+- 3つのメトリックカード（フローティングアニメーション付き）
+- 保有不動産一覧
+- Google Maps（ダークモード、ネオンピン）
 
-To learn more about Next.js, take a look at the following resources:
+## 🛠️ 技術スタック
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| カテゴリ | 技術 |
+|---------|------|
+| フレームワーク | Next.js 16 (App Router) |
+| 言語 | TypeScript |
+| スタイリング | Tailwind CSS v4 |
+| アイコン | Lucide React |
+| アニメーション | Framer Motion |
+| マップ | @vis.gl/react-google-maps |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🎮 デモ
 
-## Deploy on Vercel
+以下の企業名で検索できます：
+- `株式会社ナガオカ` - 含み益のある企業
+- `サンプル不動産` - 含み損のある企業
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📝 今後の開発予定
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [ ] EDINET API連携（有価証券報告書の自動取得）
+- [ ] Gemini AI連携（賃貸等不動産データの抽出）
+- [ ] データベース連携
+- [ ] ユーザー認証
+
+## 📄 ライセンス
+
+MIT License
