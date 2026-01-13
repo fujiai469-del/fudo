@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
         // Gemini AI を初期化
         const genAI = new GoogleGenerativeAI(apiKey);
         // 安定版のモデルを使用
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
         // プロンプトを作成
         const prompt = `
