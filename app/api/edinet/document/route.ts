@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// EDINET API V2 エンドポイント
-const EDINET_API_BASE = "https://api.edinet-fsa.go.jp/api/v2";
+// EDINET API V2 エンドポイント（認証不要）
+const EDINET_API_BASE = "https://disclosure.edinet-fsa.go.jp/api/v2";
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
@@ -14,54 +14,27 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    const apiKey = process.env.EDINET_API_KEY;
-    if (!apiKey) {
-        return NextResponse.json(
-            { error: "EDINET APIキーが設定されていません" },
-            { status: 500 }
-        );
-    }
-
     try {
-        // XBRLデータを取得
-        const xbrlData = await fetchXBRLData(apiKey, docId);
-
-        // 賃貸等不動産関連のデータを抽出
-        const realEstateData = extractRealEstateData(xbrlData);
+        // 財務データ（CSV形式）を取得して解析
+        const realEstateData = await extractRealEstateFromCSV(docId);
 
         return NextResponse.json(realEstateData);
     } catch (error) {
         console.error("EDINET document fetch error:", error);
         return NextResponse.json(
-            { error: "書類の取得に失敗しました" },
+            { error: "書類の取得に失敗しました", details: String(error) },
             { status: 500 }
         );
     }
 }
 
-// XBRLデータを取得
-async function fetchXBRLData(apiKey: string, docId: string): Promise<string> {
-    // type=1: 提出本文書及び監査報告書 (ZIP形式)
-    // type=5: CSV形式のデータ
-    const url = `${EDINET_API_BASE}/documents/${docId}?type=5&Subscription-Key=${apiKey}`;
-
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`EDINET API error: ${response.status}`);
-    }
-
-    // CSVデータをテキストとして取得
-    const text = await response.text();
-    return text;
-}
-
-// 賃貸等不動産データを抽出（簡易版）
-// 実際にはXBRLパースやPDF解析が必要
-function extractRealEstateData(xbrlData: string): {
+// CSVデータから賃貸等不動産データを抽出
+async function extractRealEstateFromCSV(docId: string): Promise<{
     bookValue: number | null;
     marketValue: number | null;
     unrealizedGain: number | null;
     properties: Array<{
+        id: string;
         name: string;
         location: string;
         bookValue: number;
@@ -69,30 +42,100 @@ function extractRealEstateData(xbrlData: string): {
     }>;
     rawDataAvailable: boolean;
     message: string;
-} {
-    // XBRLデータから賃貸等不動産を検索
-    // 実際の実装では、XBRLタグを解析する必要がある
-    // jpcrp_cor:RentalRealEstateBookValueSummary
-    // jpcrp_cor:RentalRealEstateMarketValueSummary
+    companyName?: string;
+}> {
+    // type=5: CSV形式のデータ
+    const url = `${EDINET_API_BASE}/documents/${docId}?type=5`;
 
-    // 簡易的な実装：CSVデータに賃貸等不動産が含まれているか確認
-    const hasRentalRealEstateData =
-        xbrlData.includes("賃貸等不動産") ||
-        xbrlData.includes("RentalRealEstate") ||
-        xbrlData.includes("投資不動産");
+    console.log(`Fetching document CSV: ${url}`);
 
-    if (hasRentalRealEstateData) {
-        // TODO: 実際のXBRLパースを実装
-        // ここでは構造のみを返す
-        return {
-            bookValue: null,
-            marketValue: null,
-            unrealizedGain: null,
-            properties: [],
-            rawDataAvailable: true,
-            message: "賃貸等不動産データが見つかりました。詳細な解析にはGemini AIが必要です。",
-        };
+    const response = await fetch(url);
+
+    if (!response.ok) {
+        // CSVがない場合はXBRLを試す
+        return await extractFromXBRL(docId);
     }
+
+    const csvText = await response.text();
+
+    // CSVから賃貸等不動産関連のデータを検索
+    const lines = csvText.split("\n");
+
+    let bookValue: number | null = null;
+    let marketValue: number | null = null;
+    let companyName: string | undefined;
+
+    for (const line of lines) {
+        const lowerLine = line.toLowerCase();
+
+        // 会社名を抽出
+        if (line.includes("提出者") || line.includes("会社名")) {
+            const parts = line.split(",");
+            if (parts.length > 1) {
+                companyName = parts[1]?.replace(/"/g, "").trim();
+            }
+        }
+
+        // 賃貸等不動産関連のキーワードを検索
+        if (
+            line.includes("賃貸等不動産") ||
+            line.includes("RentalRealEstate") ||
+            line.includes("投資不動産") ||
+            lowerLine.includes("rental") && lowerLine.includes("real") && lowerLine.includes("estate")
+        ) {
+            // 数値を抽出
+            const numbers = line.match(/[\d,]+/g);
+            if (numbers && numbers.length >= 1) {
+                const value = parseInt(numbers[0].replace(/,/g, ""), 10);
+                if (!isNaN(value)) {
+                    if (line.includes("帳簿") || line.includes("簿価") || lowerLine.includes("book")) {
+                        bookValue = value / 1000000; // 円→百万円
+                    } else if (line.includes("時価") || line.includes("公正") || lowerLine.includes("fair") || lowerLine.includes("market")) {
+                        marketValue = value / 1000000;
+                    }
+                }
+            }
+        }
+    }
+
+    // 含み損益を計算
+    const unrealizedGain =
+        bookValue !== null && marketValue !== null
+            ? marketValue - bookValue
+            : null;
+
+    const hasData = bookValue !== null || marketValue !== null;
+
+    return {
+        bookValue,
+        marketValue,
+        unrealizedGain,
+        properties: [], // 物件詳細は別途解析が必要
+        rawDataAvailable: hasData,
+        companyName,
+        message: hasData
+            ? "賃貸等不動産データを取得しました"
+            : "この企業の有価証券報告書には賃貸等不動産の数値データが見つかりませんでした。注記情報を確認してください。",
+    };
+}
+
+// XBRLからデータを抽出（フォールバック）
+async function extractFromXBRL(docId: string): Promise<{
+    bookValue: number | null;
+    marketValue: number | null;
+    unrealizedGain: number | null;
+    properties: Array<{
+        id: string;
+        name: string;
+        location: string;
+        bookValue: number;
+        marketValue: number;
+    }>;
+    rawDataAvailable: boolean;
+    message: string;
+}> {
+    // type=1: XBRL形式（ZIP）
+    // 簡易実装：ZIPの解凍は複雑なので、ここではCSVのみ対応
 
     return {
         bookValue: null,
@@ -100,6 +143,6 @@ function extractRealEstateData(xbrlData: string): {
         unrealizedGain: null,
         properties: [],
         rawDataAvailable: false,
-        message: "この企業の有価証券報告書には賃貸等不動産の記載がない可能性があります。",
+        message: "この書類のCSVデータが取得できませんでした。XBRL解析機能は今後実装予定です。",
     };
 }

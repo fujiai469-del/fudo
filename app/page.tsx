@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Book, TrendingUp, BarChart3, Building2, Info, AlertCircle } from "lucide-react";
+import { Book, TrendingUp, BarChart3, Building2, Info } from "lucide-react";
 
 import Header from "./components/Header";
 import SearchBar from "./components/SearchBar";
@@ -94,10 +94,6 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        // APIキーがない場合
-        if (response.status === 500 && data.error?.includes("APIキー")) {
-          return { data: null, error: null, edinetAvailable: false };
-        }
         return { data: null, error: data.error || "検索に失敗しました", edinetAvailable: true };
       }
 
@@ -136,7 +132,7 @@ export default function Home() {
       return { data: null, error: "該当する有価証券報告書が見つかりませんでした", edinetAvailable: true };
     } catch (error) {
       console.error("EDINET search error:", error);
-      return { data: null, error: null, edinetAvailable: false };
+      return { data: null, error: "EDINET APIへの接続に失敗しました", edinetAvailable: true };
     }
   };
 
@@ -169,8 +165,6 @@ export default function Home() {
       setCompanyData(null);
       if (result.error) {
         setErrorMessage(result.error);
-      } else if (!result.edinetAvailable) {
-        setErrorMessage("EDINET APIが利用できません。APIキーを設定してください。");
       }
     }
 
@@ -320,29 +314,16 @@ export default function Home() {
             className="text-center mt-12"
           >
             <div className="glass-card inline-block p-8 max-w-md">
-              <div className="text-6xl mb-4">
-                {edinetStatus === "unavailable" ? "⚙️" : "🔍"}
-              </div>
+              <div className="text-6xl mb-4">🔍</div>
               <h3 className="text-xl font-bold text-white mb-2">
-                {edinetStatus === "unavailable"
-                  ? "EDINET APIの設定が必要です"
-                  : "データが見つかりません"}
+                データが見つかりません
               </h3>
               <p className="text-gray-400 text-sm">
                 {errorMessage || "入力された企業名に該当するデータがありません。"}
               </p>
-
-              {edinetStatus === "unavailable" && (
-                <div className="mt-4 p-3 rounded-lg bg-[var(--neon-cyan)] bg-opacity-10 border border-[var(--neon-cyan)] border-opacity-30">
-                  <p className="text-xs text-[var(--neon-cyan)] flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>
-                      実際の企業データを取得するには、EDINET APIキーの設定が必要です。
-                      金融庁のEDINETサイトで無料で取得できます。
-                    </span>
-                  </p>
-                </div>
-              )}
+              <p className="text-gray-500 text-xs mt-3">
+                正式名称で検索してください（例：トヨタ自動車株式会社）
+              </p>
             </div>
           </motion.div>
         )}
